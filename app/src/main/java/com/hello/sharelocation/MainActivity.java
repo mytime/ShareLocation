@@ -9,6 +9,7 @@ import android.util.Log;
  */
 import com.baidu.mapapi.SDKInitializer;
 import com.baidu.mapapi.map.BaiduMap;
+import com.baidu.mapapi.map.BaiduMapOptions;
 import com.baidu.mapapi.map.BitmapDescriptor;
 import com.baidu.mapapi.map.MapStatusUpdate;
 import com.baidu.mapapi.map.MapStatusUpdateFactory;
@@ -38,40 +39,16 @@ import java.util.List;
 public class MainActivity extends Activity {
     public MapView mapView = null;
     public BaiduMap baiduMap = null;
+    public BaiduMapOptions baiduMapOptions;
 
     // 定位相关声明
     public LocationClient locationClient = null;
+
     //自定义图标
     BitmapDescriptor mCurrentMarker = null;
     boolean isFirstLoc = true;// 是否首次定位
 
-    public BDLocationListener myListener = new BDLocationListener() {
-        @Override
-        public void onReceiveLocation(BDLocation location) {
-            // map view 销毁后不在处理新接收的位置
-            if (location == null || mapView == null)
-                return;
 
-            MyLocationData locData = new MyLocationData.Builder()
-                    .accuracy(location.getRadius())
-                            // 此处设置开发者获取到的方向信息，顺时针0-360
-                    .direction(100).latitude(location.getLatitude())
-                    .longitude(location.getLongitude()).build();
-            baiduMap.setMyLocationData(locData);	//设置定位数据
-
-
-            if (isFirstLoc) {
-                isFirstLoc = false;
-
-
-                LatLng ll = new LatLng(location.getLatitude(),
-                        location.getLongitude());
-                MapStatusUpdate u = MapStatusUpdateFactory.newLatLngZoom(ll, 16);	//设置地图中心点以及缩放级别
-//				MapStatusUpdate u = MapStatusUpdateFactory.newLatLng(ll);
-                baiduMap.animateMapStatus(u);
-            }
-        }
-    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -79,22 +56,118 @@ public class MainActivity extends Activity {
         // 在使用SDK各组件之前初始化context信息，传入ApplicationContext
         // 注意该方法要再setContentView方法之前实现
         SDKInitializer.initialize(getApplicationContext());
+
         setContentView(R.layout.activity_main);
 
-        mapView = (MapView) this.findViewById(R.id.bmapView); // 获取地图控件引用
+        // 获取地图控件引用
+        mapView = (MapView) this.findViewById(R.id.bmapView);
+
+        //获取地图控制器
         baiduMap = mapView.getMap();
+
+        //??? 不生效
+        //设置是否显示缩放控件
+//        baiduMapOptions = new BaiduMapOptions();
+//        baiduMapOptions.zoomControlsEnabled(false);
+
+        //设置地图类型 MAP_TYPE_NORMAL 普通图； MAP_TYPE_SATELLITE 卫星图；MAP_TYPE_NONE 卫星图
+        //MAP_TYPE_NORMAL = 1, MAP_TYPE_SATELLITE = 2
+        baiduMap.setMapType(baiduMap.MAP_TYPE_NORMAL);
+        System.out.println("地图类型::" + baiduMap.getMapType());
+
         //开启定位图层
         baiduMap.setMyLocationEnabled(true);
 
-        locationClient = new LocationClient(getApplicationContext()); // 实例化LocationClient类
-        locationClient.registerLocationListener(myListener); // 注册监听函数
-        this.setLocationOption();	//设置定位参数
-        locationClient.start(); // 开始定位
-        // baiduMap.setMapType(BaiduMap.MAP_TYPE_NORMAL); // 设置为一般地图
 
-        // baiduMap.setMapType(BaiduMap.MAP_TYPE_SATELLITE); //设置为卫星地图
-        // baiduMap.setTrafficEnabled(true); //开启交通图
+        //定位服务的客户端。宿主程序在客户端声明此类，并调用，目前只支持在主线程中启动
+        locationClient = new LocationClient(getApplicationContext());
+        System.out.println("定位版本：：" + locationClient.getVersion());
 
+        //注册定位监听函数,arg: BDLocationListener listener
+        locationClient.registerLocationListener(myListener);
+
+        //封装定位参数
+        setLocationOption();
+
+        //启动定位sdk
+        locationClient.start();
+
+
+    }
+
+
+    public BDLocationListener myListener = new BDLocationListener() {
+        @Override
+        public void onReceiveLocation(BDLocation location) {
+
+            System.out.println("城市:" + location.getCity());
+
+            // map view 销毁后不在处理新接收的位置
+            if (location == null || mapView == null)
+                return;
+
+            /**
+             * MyLocationData.Builder() 定位数据建造器
+             * MyLocationData  定位数据
+             */
+            MyLocationData locData = new MyLocationData.Builder()
+                    .accuracy(location.getRadius()) //设置定位数据的精度信息，单位：米
+                    .direction(100) //设置定位数据的方向信息
+                    .latitude(location.getLatitude()) //设置定位数据的纬度
+                    .longitude(location.getLongitude())//设置定位数据的经度
+                    .build(); //构建生成定位数据对象 return new MyLocationData
+
+            baiduMap.setMyLocationData(locData);	//设置定位数据, 只有先允许定位图层后设置数据才会生效
+
+
+            if (isFirstLoc) {
+                isFirstLoc = false;
+
+                //地理坐标基本数据结构(维度，经度)
+                LatLng latLng = new LatLng(location.getLatitude(),location.getLongitude());
+
+                /**
+                 * 设置地图中心点
+                 * newLatLngZoom 设置地图中心点以及缩放级别
+                 * latLng :地图中心点，不能为 null
+                 * 18 : 缩放级别 [3, 21]
+                 */
+                MapStatusUpdate u = MapStatusUpdateFactory.newLatLngZoom(latLng, 18);
+
+                //以动画方式更新地图状态
+                baiduMap.animateMapStatus(u);
+            }
+        }
+    };
+
+    /**
+     * 设置定位参数
+     */
+    private void setLocationOption() {
+        //配置定位SDK各配置参数，比如定位模式、定位时间间隔、坐标系类型等
+        LocationClientOption option = new LocationClientOption();
+
+        //是否打开gps进行定位
+        option.setOpenGps(true);
+
+        //设置定位模式( 高精度模式)
+        option.setLocationMode(LocationClientOption.LocationMode.Hight_Accuracy);
+
+        //设置坐标类型,
+        //取值有3个： 返回国测局经纬度坐标系：gcj02 返回百度墨卡托坐标系 ：bd09 返回百度经纬度坐标系 ：bd09ll
+        option.setCoorType("bd09ll");
+
+        //设置扫描间隔，单位是毫秒 当<1000(1s)时，定时定位无效
+        option.setScanSpan(2000);
+
+        //设置是否需要地址信息，默认为无地址
+        option.setIsNeedAddress(true);
+
+        //在网络定位时，是否需要设备方向 true:需要 ; false:不需要。默认为false
+        option.setNeedDeviceDirect(true);
+
+        //设置 LocationClientOption
+        locationClient.setLocOption(option);
     }
 
     // 三个状态实现地图生命周期管理
@@ -120,20 +193,7 @@ public class MainActivity extends Activity {
         mapView.onPause();
     }
 
-    /**
-     * 设置定位参数
-     */
-    private void setLocationOption() {
-        LocationClientOption option = new LocationClientOption();
-        option.setOpenGps(true); // 打开GPS
-        option.setLocationMode(LocationClientOption.LocationMode.Hight_Accuracy);// 设置定位模式
-        option.setCoorType("bd09ll"); // 返回的定位结果是百度经纬度,默认值gcj02
-        option.setScanSpan(5000); // 设置发起定位请求的间隔时间为5000ms
-        option.setIsNeedAddress(true); // 返回的定位结果包含地址信息
-        option.setNeedDeviceDirect(true); // 返回的定位结果包含手机机头的方向
 
-        locationClient.setLocOption(option);
-    }
 
 }
 
